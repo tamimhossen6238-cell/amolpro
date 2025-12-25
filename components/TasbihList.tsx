@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Tasbih } from '../types';
-import { ChevronLeft, Plus, FolderCog, Pencil, Trash2, X } from 'lucide-react';
+import { ChevronLeft, Plus, FolderCog, Pencil, Trash2, X, BookText, Mic, BotMessageSquare, Fingerprint } from 'lucide-react';
 import { DAYS_OF_WEEK } from '../constants';
 import { toast } from 'react-hot-toast';
 
@@ -21,10 +21,41 @@ const TasbihList: React.FC<Props> = ({ tasbihs, onBack, onSelect, onAdd, onEdit,
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [arabicText, setArabicText] = useState('');
-  const [banglaMeaning, setBanglaMeaning] = useState('');
+  const [banglaPronunciation, setBanglaPronunciation] = useState('');
+  const [banglaTranslation, setBanglaTranslation] = useState('');
   const [manualNeki, setManualNeki] = useState('');
   const [scheduleType, setScheduleType] = useState<'everyday' | 'custom'>('everyday');
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
+
+  const calculateNekiPerCount = (tasbih: Tasbih): number => {
+    // 1. Priority: User-defined fixed Neki for default tasbihs.
+    switch (tasbih.id) {
+        case '1': return 70;
+        case '2': return 80;
+        case '3': return 90;
+        case '4': return 120;
+        case '5': return 100;
+        case '6': return 300;
+    }
+
+    // 2. Priority: Custom tasbihs with arabic text
+    if (tasbih.arabicText && tasbih.arabicText.trim().length > 0) {
+        const originalText = tasbih.arabicText.trim();
+        const cleanText = originalText
+            .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, "")
+            .replace(/\u0640/g, "")
+            .replace(/\s+/g, "")
+            .replace(/[^\u0600-\u06FF]/g, "");
+        return cleanText.length * 10;
+    }
+
+    // 3. Priority: Custom tasbihs with manual Neki
+    if (tasbih.manualNeki) {
+        return tasbih.manualNeki;
+    }
+    
+    return 0;
+  };
 
   const toggleDay = (day: string) => {
     if (selectedDays.includes(day)) {
@@ -44,7 +75,8 @@ const TasbihList: React.FC<Props> = ({ tasbihs, onBack, onSelect, onAdd, onEdit,
     setEditingId(t.id);
     setName(t.name);
     setArabicText(t.arabicText || '');
-    setBanglaMeaning(t.banglaMeaning || '');
+    setBanglaPronunciation(t.banglaPronunciation || '');
+    setBanglaTranslation(t.banglaTranslation || '');
     setManualNeki(t.manualNeki ? t.manualNeki.toString() : '');
     setScheduleType(Array.isArray(t.schedule) ? 'custom' : 'everyday');
     setSelectedDays(Array.isArray(t.schedule) ? t.schedule : []);
@@ -58,7 +90,8 @@ const TasbihList: React.FC<Props> = ({ tasbihs, onBack, onSelect, onAdd, onEdit,
         id: editingId || Date.now().toString(),
         name,
         arabicText: arabicText.trim() || undefined,
-        banglaMeaning: banglaMeaning.trim() || undefined,
+        banglaPronunciation: banglaPronunciation.trim() || undefined,
+        banglaTranslation: banglaTranslation.trim() || undefined,
         manualNeki: manualNeki ? parseInt(manualNeki) : undefined,
         schedule: scheduleType === 'everyday' ? 'everyday' : selectedDays,
         count: editingId ? tasbihs.find(t => t.id === editingId)?.count || 0 : 0,
@@ -79,7 +112,8 @@ const TasbihList: React.FC<Props> = ({ tasbihs, onBack, onSelect, onAdd, onEdit,
   const resetForm = () => {
     setName('');
     setArabicText('');
-    setBanglaMeaning('');
+    setBanglaPronunciation('');
+    setBanglaTranslation('');
     setManualNeki('');
     setScheduleType('everyday');
     setSelectedDays([]);
@@ -101,7 +135,7 @@ const TasbihList: React.FC<Props> = ({ tasbihs, onBack, onSelect, onAdd, onEdit,
                 onClick={() => {
                     onDelete(id);
                     toast.dismiss(t.id);
-                    toast.success('মুছে ফেলা হয়েছে');
+                    toast.success('মুছে ফেলা হয়েছে', { duration: 3000 });
                 }}
                 className="px-4 py-2 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition-colors"
             >
@@ -145,22 +179,21 @@ const TasbihList: React.FC<Props> = ({ tasbihs, onBack, onSelect, onAdd, onEdit,
       {/* List */}
       <div className="p-4 space-y-3">
         {tasbihs.map((t) => {
-          // Calculate Neki for today's view
-          let perCount = 0;
-          if (t.arabicText && t.arabicText.trim().length > 0) {
-              perCount = t.arabicText.replace(/\s/g, '').length * 10;
-          } else if (t.manualNeki) {
-              perCount = t.manualNeki;
-          }
+          const perCount = calculateNekiPerCount(t);
           const earnedNeki = t.count * perCount;
 
           return (
-            <div key={t.id} className="bg-white dark:bg-night-800 rounded-xl p-4 shadow-sm border border-slate-100 dark:border-slate-800 relative group active:scale-[0.99] transition-transform cursor-pointer" onClick={() => onSelect(t.id)}>
+            <div 
+              key={t.id} 
+              className={`bg-white dark:bg-night-800 rounded-xl p-4 shadow-sm relative group active:scale-[0.99] transition-all cursor-pointer ${
+                t.count === 0 ? 'border-2 border-red-400 dark:border-red-500' : 'border border-slate-100 dark:border-slate-800'
+              }`}
+              onClick={() => onSelect(t.id)}
+            >
               <div className="flex justify-between items-start mb-2">
-                  <div className="flex-1">
-                      <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">{t.name}</h3>
-                      {t.arabicText && <p className="text-islamic-600 dark:text-islamic-400 font-serif text-xl mt-1 leading-relaxed">{t.arabicText}</p>}
-                      {t.banglaMeaning && <p className="text-slate-500 dark:text-slate-400 text-xs mt-1 italic">{t.banglaMeaning}</p>}
+                  <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg truncate">{t.name}</h3>
+                      {t.arabicText && <p className="text-islamic-600 dark:text-islamic-400 font-serif text-xl mt-1 leading-relaxed truncate">{t.arabicText}</p>}
                   </div>
                   <div className="text-xs bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-md text-slate-500 dark:text-slate-300 ml-2 whitespace-nowrap">
                       {Array.isArray(t.schedule) ? 'Custom Days' : 'প্রতিদিন'}
@@ -171,7 +204,7 @@ const TasbihList: React.FC<Props> = ({ tasbihs, onBack, onSelect, onAdd, onEdit,
                       আজ: {t.count} বার
                       </span>
                       {earnedNeki > 0 && (
-                          <span className="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded">
+                          <span className="text-xs font-bold text-islamic-600 dark:text-islamic-400 bg-islamic-50 dark:bg-islamic-900/20 px-2 py-1 rounded">
                            +{earnedNeki} নেকি
                           </span>
                       )}
@@ -188,7 +221,10 @@ const TasbihList: React.FC<Props> = ({ tasbihs, onBack, onSelect, onAdd, onEdit,
 
       {/* File Manager Modal */}
       {showManager && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div 
+          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+          onClick={(e) => e.target === e.currentTarget && setShowManager(false)}
+        >
             <div className="bg-white dark:bg-night-800 rounded-2xl w-full max-w-sm shadow-xl flex flex-col max-h-[80vh] border dark:border-slate-700">
                 <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
                     <h3 className="font-bold text-lg dark:text-white flex items-center gap-2"><FolderCog size={20}/> ফাইল ম্যানেজার</h3>
@@ -222,7 +258,10 @@ const TasbihList: React.FC<Props> = ({ tasbihs, onBack, onSelect, onAdd, onEdit,
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
+        <div 
+          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto"
+          onClick={(e) => e.target === e.currentTarget && setShowModal(false)}
+        >
           <div className="bg-white dark:bg-night-800 rounded-2xl p-6 w-full max-w-sm shadow-xl max-h-[90vh] overflow-y-auto no-scrollbar border dark:border-slate-700">
             <h3 className="text-lg font-bold mb-4 dark:text-white">{editingId ? 'আমল এডিট করুন' : 'নতুন আমল যোগ করুন'}</h3>
             
@@ -280,15 +319,25 @@ const TasbihList: React.FC<Props> = ({ tasbihs, onBack, onSelect, onAdd, onEdit,
                     <p className="text-[10px] text-slate-400 mt-1">আরবি দিলে প্রতি হরফে ১০ নেকি যোগ হবে।</p>
                 </div>
 
+                {/* Pronunciation */}
+                <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">বাংলা উচ্চারণ (অপশনাল)</label>
+                    <textarea
+                    placeholder="বাংলা উচ্চারণ..." 
+                    className="w-full p-3 rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-black dark:text-white h-16 resize-none"
+                    value={banglaPronunciation}
+                    onChange={e => setBanglaPronunciation(e.target.value)}
+                    />
+                </div>
+
                 {/* Meaning */}
                 <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1">বাংলা অর্থ (অপশনাল)</label>
-                    <input 
-                    type="text" 
-                    placeholder="অর্থ..." 
-                    className="w-full p-3 rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-black dark:text-white"
-                    value={banglaMeaning}
-                    onChange={e => setBanglaMeaning(e.target.value)}
+                    <textarea
+                    placeholder="বাংলা অর্থ..." 
+                    className="w-full p-3 rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-black dark:text-white h-16 resize-none"
+                    value={banglaTranslation}
+                    onChange={e => setBanglaTranslation(e.target.value)}
                     />
                 </div>
 

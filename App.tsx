@@ -73,7 +73,10 @@ export default function App() {
       todayNeki: parsed.todayNeki || 0,
       todayJournalCount: parsed.todayJournalCount || 0,
       lastHadithDate: parsed.lastHadithDate || '',
-      shownHadithIndices: parsed.shownHadithIndices || [] 
+      shownHadithIndices: parsed.shownHadithIndices || [],
+      lastWeeklyReportDate: parsed.lastWeeklyReportDate || '',
+      lastMonthlyReportDate: parsed.lastMonthlyReportDate || '',
+      todayActivityPerformed: parsed.todayActivityPerformed || false
     };
   });
 
@@ -131,6 +134,7 @@ export default function App() {
     setInbox(prev => prev.filter(m => new Date(m.date).getTime() > cutoffTime));
     
     // --- 1. DAILY REPORT & RESET LOGIC (Triggered on Date Change - Midnight Local) ---
+    // If lastActiveDate is not today, it means we are entering a new day (or missed some days).
     if (stats.lastActiveDate !== todayStr) {
       // Include General Tasbih in reports/history
       const allTasbihsIncludingGeneral = [...tasbihs, generalTasbih];
@@ -139,7 +143,7 @@ export default function App() {
       const completedTargets = targets.filter(t => t.completed);
       const totalTimeSeconds = allTasbihsIncludingGeneral.reduce((acc, t) => acc + (t.todayTime || 0), 0);
       
-      // --- GARDEN SNAPSHOT LOGIC ---
+      // --- GARDEN SNAPSHOT LOGIC (For Tasbihs) ---
       // Plant trees for yesterday's activity IF count >= 100
       const gardenCandidates = activeTasbihs.filter(t => t.count >= 100);
       let newTrees: GardenTree[] = [];
@@ -149,18 +153,28 @@ export default function App() {
             id: `${stats.lastActiveDate}_${t.id}`, // Unique ID: Date + TasbihID
             tasbihName: t.name,
             date: stats.lastActiveDate, // The date they were active (yesterday)
-            count: t.count // Snapshot of the TOTAL count at that moment
+            count: t.count, // Snapshot of the TOTAL count at that moment
+            type: 'tasbih'
         }));
         
         setGarden(prev => [...prev, ...newTrees]);
       }
 
       // --- HISTORY ARCHIVING ---
+      // Prepare Snapshot of counts for history
+      const tasbihCountsSnapshot: Record<string, number> = {};
+      allTasbihsIncludingGeneral.forEach(t => {
+          if (t.count > 0) {
+              tasbihCountsSnapshot[t.id] = t.count;
+          }
+      });
+
       // We are about to reset stats, so save yesterday's stats to history
       const historyEntry: DailyHistory = {
           date: stats.lastActiveDate,
           totalTime: totalTimeSeconds,
-          totalNeki: stats.todayNeki
+          totalNeki: stats.todayNeki,
+          tasbihCounts: tasbihCountsSnapshot // NEW: Save the count breakdown
       };
       
       setHistory(prev => {
@@ -210,9 +224,42 @@ export default function App() {
       };
       
       let newMessages = [dailyMsg];
+
+      // --- SCHEDULED TASBIH REMINDER LOGIC ---
+      const todayDayName = new Date().toLocaleDateString('bn-BD', { weekday: 'short' });
+      const scheduledTasbihsForToday = tasbihs.filter(t => 
+        Array.isArray(t.schedule) && t.schedule.includes(todayDayName)
+      );
+
+      if (scheduledTasbihsForToday.length > 0) {
+        const reminderMessages: InboxMessage[] = scheduledTasbihsForToday.map(t => ({
+          id: Date.now().toString() + `_reminder_${t.id}`,
+          title: 'আজকের নির্ধারিত আমল',
+          body: `আজ আপনার "${t.name}" আমলটি করার দিন। আল্লাহ আপনার আমল কবুল করুন।`,
+          date: new Date().toISOString(),
+          read: false,
+          type: 'reminder'
+        }));
+        newMessages.push(...reminderMessages);
+      }
+
+      // --- CALCULATE REPORT DATES FOR CATCH-UP LOGIC ---
+      // Find the most recent Friday (or today if it's Friday)
+      const daysSinceFriday = (now.getDay() + 7 - 5) % 7; 
+      const mostRecentFridayDate = new Date(now);
+      mostRecentFridayDate.setDate(now.getDate() - daysSinceFriday);
+      const mostRecentFridayStr = mostRecentFridayDate.toISOString().split('T')[0];
+
+      // Find the most recent 1st of the month
+      const mostRecentFirstDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      const mostRecentFirstStr = mostRecentFirstDate.toISOString().split('T')[0];
       
-      // Weekly Report (Friday)
-      if (now.getDay() === 5) { 
+      let updateWeeklyDate = stats.lastWeeklyReportDate;
+      let updateMonthlyDate = stats.lastMonthlyReportDate;
+
+      // Weekly Report (Friday) - Catch up logic
+      // If we haven't sent a report for the most recent Friday cycle yet
+      if (!stats.lastWeeklyReportDate || stats.lastWeeklyReportDate < mostRecentFridayStr) {
          const totalJournalXP = journal.length * 100;
          
          // Weekly Tree Calculation
@@ -238,16 +285,17 @@ export default function App() {
          const weeklyMsg: InboxMessage = {
             id: Date.now().toString() + '_weekly',
             title: 'সাপ্তাহিক রিপোর্ট (জুমা মুবারক)',
-            body: `আসসালামু আলাইকুম,\nজুমা মুবারক! আপনার আমলের অগ্রগতি:\n\n✨ **সর্বমোট নেকি:** ${stats.totalNeki}\n📜 **মোট ভালো কাজ:** ${journal.length} টি (${totalJournalXP} XP)\n🔥 **বর্তমান স্ট্রীক:** ${stats.streak} দিন\n${weeklyTreeStats}\nআল্লাহ আপনার সকল ইবাদত কবুল করুন।`,
+            body: `আসসালামু আলাইকুম,\nজুমা মুবারক! আপনার আমলের অগ্রগতি:\n\n✨ **সর্বমোট নেকি:** ${stats.totalNeki}\n📜 **মোট ভালো কাজ:** ${journal.length} টি (${totalJournalXP} XP)\n🔥 **বর্তমান স্ট্রীক:** ${stats.streak}\n${weeklyTreeStats}\nআল্লাহ আপনার সকল ইবাদত কবুল করুন।`,
             date: new Date().toISOString(),
             read: false,
             type: 'weekly_report'
          };
          newMessages.push(weeklyMsg);
+         updateWeeklyDate = mostRecentFridayStr;
       }
 
-      // Monthly Report (1st of Month)
-      if (now.getDate() === 1) {
+      // Monthly Report (1st of Month) - Catch up logic
+      if (!stats.lastMonthlyReportDate || stats.lastMonthlyReportDate < mostRecentFirstStr) {
           const totalJournalXP = journal.length * 100;
           
           // Monthly Tree Calculation
@@ -279,91 +327,117 @@ export default function App() {
             type: 'report'
          };
          newMessages.push(monthlyMsg);
+         updateMonthlyDate = mostRecentFirstStr;
       }
 
       setInbox(prev => [...newMessages, ...prev]);
+
+      // --- NEW STREAK LOGIC ---
+      let newStreak = stats.todayActivityPerformed ? 1 : 0;
+      const yesterdayStr = new Date(new Date().setDate(new Date().getDate() - 1)).toISOString().split('T')[0];
+      if (stats.lastActiveDate === yesterdayStr && stats.todayActivityPerformed) {
+          newStreak = stats.streak + 1;
+      }
 
       // --- RESET COUNTERS ---
       setTasbihs(prev => prev.map(t => ({ ...t, count: 0, todayTime: 0 })));
       setGeneralTasbih(prev => ({ ...prev, count: 0, todayTime: 0 }));
       setTargets(prev => prev.map(t => ({ ...t, completed: false })));
 
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
-      
-      let newStreak = stats.streak;
-      if (stats.lastActiveDate === yesterdayStr) {
-        newStreak += 1;
-      } else if (stats.lastActiveDate !== todayStr) {
-        newStreak = 1; 
-      }
-
       setStats(prev => ({
         ...prev,
         lastActiveDate: todayStr,
         todayNeki: 0,
         todayJournalCount: 0,
-        streak: newStreak
+        streak: newStreak,
+        todayActivityPerformed: false, // Reset for the new day
+        lastWeeklyReportDate: updateWeeklyDate,
+        lastMonthlyReportDate: updateMonthlyDate
       }));
     }
 
     // --- 2. DAILY HADITH LOGIC (Random & Non-repeating) ---
+    // UPDATED: Now triggers immediately on date change (After 12:00 AM)
     if (stats.lastHadithDate !== todayStr) {
-        const scheduleTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 4, 30, 0);
-        if (now >= scheduleTime) {
-            const totalItems = ISLAMIC_DATABASE.length;
-            let currentShown = stats.shownHadithIndices || [];
+        const totalItems = ISLAMIC_DATABASE.length;
+        let currentShown = stats.shownHadithIndices || [];
 
-            if (currentShown.length >= totalItems) {
-                currentShown = [];
-            }
-
-            const availableIndices: number[] = [];
-            for (let i = 0; i < totalItems; i++) {
-                if (!currentShown.includes(i)) {
-                    availableIndices.push(i);
-                }
-            }
-
-            let selectedIndex = 0;
-            if (availableIndices.length > 0) {
-                const randomPointer = Math.floor(Math.random() * availableIndices.length);
-                selectedIndex = availableIndices[randomPointer];
-            }
-
-            const content = ISLAMIC_DATABASE[selectedIndex];
-            const hadithMsg: InboxMessage = {
-                id: Date.now().toString() + '_hadith',
-                title: 'আজকের বাণী',
-                body: `${content.text}\n\n— ${content.source}`,
-                date: scheduleTime.toISOString(), 
-                read: false,
-                type: 'info'
-            };
-
-            setInbox(prev => [hadithMsg, ...prev]);
-            setStats(prev => ({
-                ...prev,
-                shownHadithIndices: currentShown.length >= totalItems ? [selectedIndex] : [...currentShown, selectedIndex],
-                lastHadithDate: todayStr
-            }));
+        if (currentShown.length >= totalItems) {
+            currentShown = [];
         }
+
+        const availableIndices: number[] = [];
+        for (let i = 0; i < totalItems; i++) {
+            if (!currentShown.includes(i)) {
+                availableIndices.push(i);
+            }
+        }
+
+        let selectedIndex = 0;
+        if (availableIndices.length > 0) {
+            const randomPointer = Math.floor(Math.random() * availableIndices.length);
+            selectedIndex = availableIndices[randomPointer];
+        }
+
+        const content = ISLAMIC_DATABASE[selectedIndex];
+        const hadithMsg: InboxMessage = {
+            id: Date.now().toString() + '_hadith',
+            title: 'আজকের বাণী',
+            body: `${content.text}\n\n— ${content.source}`,
+            date: new Date().toISOString(), // Use current time immediately
+            read: false,
+            type: 'info'
+        };
+
+        setInbox(prev => [hadithMsg, ...prev]);
+        setStats(prev => ({
+            ...prev,
+            shownHadithIndices: currentShown.length >= totalItems ? [selectedIndex] : [...currentShown, selectedIndex],
+            lastHadithDate: todayStr
+        }));
     }
 
-  }, [stats.lastActiveDate, stats.lastHadithDate, tasbihs, generalTasbih, targets]);
+  }, [stats.lastActiveDate, stats.lastHadithDate, tasbihs, generalTasbih, targets, stats.lastWeeklyReportDate, stats.lastMonthlyReportDate]);
 
   // Helpers
 
-  const calculateNeki = (tasbih: Tasbih): number => {
-      if (tasbih.arabicText && tasbih.arabicText.trim().length > 0) {
-          const cleanText = tasbih.arabicText.replace(/\s/g, '');
-          return cleanText.length * 10;
+  const markActivity = () => {
+      if (!stats.todayActivityPerformed) {
+          setStats(prev => ({ ...prev, todayActivityPerformed: true }));
       }
+  };
+
+  const calculateNeki = (tasbih: Tasbih): number => {
+      // 1. Priority: User-defined fixed Neki for default tasbihs.
+      switch (tasbih.id) {
+          case '1': return 70;  // Subhanallah
+          case '2': return 80;  // Alhamdulillah
+          case '3': return 90;  // Allahu Akbar
+          case '4': return 120; // La ilaha illallahu
+          case '5': return 100; // Astagfirullah
+          case '6': return 300; // Subhanallahi wa bihamdihi...
+      }
+
+      // 2. Priority: Custom tasbihs with arabic text (using the new logic)
+      if (tasbih.arabicText && tasbih.arabicText.trim().length > 0) {
+          const originalText = tasbih.arabicText.trim();
+          
+          const cleanText = originalText
+              .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, "") // Remove all diacritics
+              .replace(/\u0640/g, "")                         // Remove Tatweel
+              .replace(/\s+/g, "")                            // Remove spaces
+              .replace(/[^\u0600-\u06FF]/g, "");              // Remove non-Arabic characters
+
+          const letterCount = cleanText.length;
+          return letterCount * 10;
+      }
+      
+      // 3. Priority: Custom tasbihs with manual Neki
       if (tasbih.manualNeki && tasbih.manualNeki > 0) {
           return tasbih.manualNeki;
       }
-      // Default for General Tasbih: 0 Neki
+      
+      // 4. Fallback for things like General Tasbih
       if (tasbih.id === 'general_tasbih') {
           return 0;
       }
@@ -389,6 +463,7 @@ export default function App() {
       if (crossedMilestone) {
           const currentMilestone = Math.floor(newCount / 100) * 100;
           toast.success(`মাশআল্লাহ! ${currentMilestone} বার পূর্ণ হয়েছে`, {
+              duration: 2000,
               style: {
                   background: '#16a34a',
                   color: '#fff',
@@ -428,6 +503,7 @@ export default function App() {
   };
 
   const handleTasbihUpdate = (id: string, newCount: number, increment: number) => {
+    if (increment > 0) markActivity();
     setTasbihs(prev => prev.map(t => t.id === id ? { ...t, count: newCount, totalCount: t.totalCount + increment } : t));
     const tasbih = tasbihs.find(t => t.id === id);
     if (tasbih && increment > 0) {
@@ -438,6 +514,7 @@ export default function App() {
   };
 
   const handleGeneralTasbihUpdate = (newCount: number, increment: number) => {
+      if (increment > 0) markActivity();
       setGeneralTasbih(prev => {
           const updated = { ...prev, count: newCount, totalCount: prev.totalCount + increment };
           return updated;
@@ -473,6 +550,7 @@ export default function App() {
     const target = targets.find(t => t.id === id);
     if (!target) return;
     if (!target.completed) {
+      markActivity();
       setTargets(prev => prev.map(t => t.id === id ? { ...t, completed: true } : t));
       addNeki(target.neki);
       const infoMsg: InboxMessage = {
@@ -484,7 +562,7 @@ export default function App() {
         type: 'info',
       };
       setInbox(prev => [infoMsg, ...prev]);
-      toast.success(`${target.neki} নেকি যোগ হয়েছে!`);
+      toast.success(`${target.neki} নেকি যোগ হয়েছে!`, { duration: 3000 });
       confetti({ particleCount: 30, spread: 70, origin: { y: 0.6 } });
     } 
   };
@@ -492,18 +570,19 @@ export default function App() {
   const handleClaimNeki = (msgId: string, amount: number) => {
       addNeki(amount);
       setInbox(prev => prev.filter(m => m.id !== msgId));
-      toast.success(`${amount} নেকি যোগ হয়েছে!`);
+      toast.success(`${amount} নেকি যোগ হয়েছে!`, { duration: 3000 });
       confetti({ particleCount: 30, spread: 70, origin: { y: 0.6 } });
   };
 
   const handleDeleteMultiple = (ids: string[]) => {
      setInbox(prev => prev.filter(m => !ids.includes(m.id)));
-     toast.success(`${ids.length} টি মেসেজ মুছে ফেলা হয়েছে`);
+     toast.success(`${ids.length} টি মেসেজ মুছে ফেলা হয়েছে`, { duration: 3000 });
   };
 
   const addJournalEntry = (text: string) => {
+    const entryId = Date.now().toString();
     const newEntry: JournalEntry = {
-      id: Date.now().toString(),
+      id: entryId,
       date: new Date().toLocaleDateString('bn-BD'),
       text,
       timestamp: Date.now()
@@ -512,9 +591,38 @@ export default function App() {
     setStats(prev => ({ 
         ...prev, 
         todayJournalCount: prev.todayJournalCount + 1,
-        totalXP: prev.totalXP + 100
+        totalXP: prev.totalXP + 100,
+        todayActivityPerformed: true
     }));
-    toast.success("জার্নাল যুক্ত হয়েছে (+১০০ XP)");
+
+    const journalTree: GardenTree = {
+        id: `journal_${entryId}`,
+        tasbihName: 'ভালো কাজ',
+        date: new Date().toISOString(),
+        count: 1,
+        type: 'journal',
+        isLive: true
+    };
+    setGarden(prev => [...prev, journalTree]);
+
+    toast.success("জার্নাল যুক্ত হয়েছে এবং একটি চারা রোপন করা হয়েছে! (+১০০ XP)", { duration: 3000 });
+  };
+  
+  const handleJournalEdit = (entryId: string, newText: string) => {
+    setJournal(prev => prev.map(entry => 
+        entry.id === entryId ? { ...entry, text: newText } : entry
+    ));
+    toast.success("জার্নাল আপডেট করা হয়েছে!", { duration: 3000 });
+  };
+
+  const handleJournalDelete = (entryId: string) => {
+    setJournal(prev => prev.filter(e => e.id !== entryId));
+    setGarden(prev => prev.filter(t => t.id !== `journal_${entryId}`));
+    setStats(prev => ({
+        ...prev,
+        totalXP: Math.max(0, prev.totalXP - 100)
+    }));
+    toast.success("জার্নাল মুছে ফেলা হয়েছে এবং ১০০ XP কমানো হয়েছে।", { duration: 3000 });
   };
 
   // --- GENERAL TASBIH SESSION MANAGEMENT ---
@@ -556,6 +664,10 @@ export default function App() {
       setView(View.HOME);
   };
 
+  const totalTodayTasbihCount = tasbihs.reduce((acc, t) => acc + t.count, 0) + generalTasbih.count;
+  const completedTargetsCount = targets.filter(t => t.completed).length;
+  const totalTargetsCount = targets.length;
+
   const renderContent = () => {
     switch (view) {
       case View.HOME:
@@ -564,6 +676,9 @@ export default function App() {
             stats={stats} 
             inboxCount={inbox.filter(m => !m.read).length}
             totalJournalCount={journal.length}
+            totalTodayTasbihCount={totalTodayTasbihCount}
+            completedTargetsCount={completedTargetsCount}
+            totalTargetsCount={totalTargetsCount}
             onNavigate={setView}
             onGeneralTasbihClick={enterGeneralTasbih}
             darkMode={darkMode}
@@ -618,7 +733,9 @@ export default function App() {
         return (
           <Journal 
             entries={journal} 
-            onAdd={addJournalEntry} 
+            onAdd={addJournalEntry}
+            onEdit={handleJournalEdit}
+            onDelete={handleJournalDelete}
           />
         );
       case View.GARDEN:
@@ -641,7 +758,18 @@ export default function App() {
           />
         );
       default:
-        return <Dashboard stats={stats} inboxCount={0} totalJournalCount={journal.length} onNavigate={setView} onGeneralTasbihClick={enterGeneralTasbih} darkMode={darkMode} toggleTheme={() => setDarkMode(!darkMode)} />;
+        return <Dashboard 
+            stats={stats} 
+            inboxCount={0} 
+            totalJournalCount={journal.length} 
+            totalTodayTasbihCount={totalTodayTasbihCount}
+            completedTargetsCount={completedTargetsCount}
+            totalTargetsCount={totalTargetsCount}
+            onNavigate={setView} 
+            onGeneralTasbihClick={enterGeneralTasbih} 
+            darkMode={darkMode} 
+            toggleTheme={() => setDarkMode(!darkMode)} 
+        />;
     }
   };
 

@@ -7,13 +7,16 @@ interface Props {
   stats: Stats;
   inboxCount: number;
   totalJournalCount: number;
+  totalTodayTasbihCount: number;
+  completedTargetsCount: number;
+  totalTargetsCount: number;
   onNavigate: (view: View) => void;
   onGeneralTasbihClick: () => void;
   darkMode: boolean;
   toggleTheme: () => void;
 }
 
-const Dashboard: React.FC<Props> = ({ stats, inboxCount, totalJournalCount, onNavigate, onGeneralTasbihClick, darkMode, toggleTheme }) => {
+const Dashboard: React.FC<Props> = ({ stats, inboxCount, totalJournalCount, totalTodayTasbihCount, completedTargetsCount, totalTargetsCount, onNavigate, onGeneralTasbihClick, darkMode, toggleTheme }) => {
   const nextLevelNeki = stats.level * LEVEL_THRESHOLD;
   const progress = ((stats.totalNeki - ((stats.level - 1) * LEVEL_THRESHOLD)) / LEVEL_THRESHOLD) * 100;
   
@@ -56,26 +59,27 @@ const Dashboard: React.FC<Props> = ({ stats, inboxCount, totalJournalCount, onNa
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 gap-4">
-        {/* Neki Card - Green */}
-        <div className="bg-gradient-to-br from-islamic-500 to-islamic-600 dark:from-islamic-900 dark:to-emerald-950 dark:border dark:border-islamic-800/50 rounded-2xl p-4 text-white shadow-lg shadow-islamic-500/20 dark:shadow-none">
+        {/* Neki Card */}
+        <div className="rounded-2xl p-4 text-white shadow-lg transition-all bg-gradient-to-br from-islamic-500 to-islamic-600 dark:from-islamic-900 dark:to-emerald-950 dark:border dark:border-islamic-800/50 shadow-islamic-500/20 dark:shadow-none">
             <div className="flex justify-between items-start mb-2">
-                <div className="text-islamic-100 text-xs font-medium">আজকের নেকি</div>
-                <div className="text-islamic-100 dark:text-islamic-300 text-[10px] bg-white/20 dark:bg-black/20 px-1.5 rounded">Total</div>
+                <div className="text-xs font-medium text-islamic-100">আজকের নেকি</div>
+                <div className="text-[10px] bg-white/20 dark:bg-black/20 px-1.5 rounded text-islamic-100 dark:text-islamic-300">Total</div>
             </div>
             <div className="flex items-end gap-2">
-                 <div className="text-3xl font-bold">{stats.todayNeki}</div>
+                 <div className={`relative inline-block ${stats.todayNeki === 0 ? 'px-2 py-1 rounded-full ring-2 ring-red-400' : ''}`}>
+                    <span className="text-3xl font-bold">{stats.todayNeki}</span>
+                 </div>
             </div>
-            {/* Total Neki Larger Display */}
             <div className="mt-2 pt-2 border-t border-white/20 dark:border-white/10 flex flex-col">
-                 <div className="text-[10px] text-islamic-100 opacity-80">সর্বমোট নেকি</div>
+                 <div className="text-[10px] opacity-80 text-islamic-100">সর্বমোট নেকি</div>
                  <div className="text-xl font-bold tracking-wide">{stats.totalNeki}</div>
             </div>
         </div>
 
-        {/* XP & Journal Card - Aesthetic Dark Mode Blue */}
-        <div className="bg-gradient-to-br from-sky-400 to-blue-500 dark:from-sky-900 dark:to-blue-950 dark:border dark:border-sky-800/50 rounded-2xl p-4 text-white shadow-lg shadow-sky-400/20 dark:shadow-none flex flex-col justify-between">
+        {/* XP & Journal Card */}
+        <div className="rounded-2xl p-4 text-white shadow-lg flex flex-col justify-between transition-all bg-gradient-to-br from-sky-400 to-blue-500 dark:from-sky-900 dark:to-blue-950 dark:border dark:border-sky-800/50 shadow-sky-400/20 dark:shadow-none">
              <div>
-                <div className="text-blue-50 dark:text-sky-200 text-xs font-medium mb-1">মোট XP</div>
+                <div className="text-xs font-medium mb-1 text-blue-50 dark:text-sky-200">মোট XP</div>
                 <div className="text-2xl font-bold text-white">
                     {stats.totalXP}
                 </div>
@@ -84,11 +88,13 @@ const Dashboard: React.FC<Props> = ({ stats, inboxCount, totalJournalCount, onNa
              <div className="mt-2 pt-2 border-t border-white/20 dark:border-white/10">
                  <div className="flex justify-between items-end">
                      <div>
-                        <div className="text-[10px] text-blue-50 opacity-80">আজকের জার্নাল</div>
-                        <div className="text-lg font-bold">{stats.todayJournalCount} টি</div>
+                        <div className="text-[10px] opacity-80 text-blue-50">আজকের জার্নাল</div>
+                        <div className={`relative inline-block ${stats.todayJournalCount === 0 ? 'px-2 py-1 rounded-full ring-2 ring-red-400' : ''}`}>
+                           <span className="text-lg font-bold">{stats.todayJournalCount} টি</span>
+                        </div>
                      </div>
                      <div className="text-right">
-                        <div className="text-[10px] text-blue-50 opacity-80">সর্বমোট</div>
+                        <div className="text-[10px] opacity-80 text-blue-50">সর্বমোট</div>
                         <div className="text-lg font-bold">{totalJournalCount} টি</div>
                      </div>
                  </div>
@@ -100,7 +106,7 @@ const Dashboard: React.FC<Props> = ({ stats, inboxCount, totalJournalCount, onNa
       <div className="space-y-4">
         <h3 className="font-bold text-slate-700 dark:text-slate-300">আজকের আমল</h3>
         
-        <div onClick={() => onNavigate(View.TASBIH_LIST)} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 cursor-pointer active:scale-95 transition-transform group">
+        <div onClick={() => onNavigate(View.TASBIH_LIST)} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex items-center gap-4 cursor-pointer active:scale-95 transition-all group">
             <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-500 dark:text-blue-400 group-hover:bg-blue-100 transition-colors">
                 <Fingerprint size={24} />
             </div>
@@ -113,7 +119,7 @@ const Dashboard: React.FC<Props> = ({ stats, inboxCount, totalJournalCount, onNa
             </div>
         </div>
 
-        <div onClick={() => onNavigate(View.TARGET_LIST)} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 cursor-pointer active:scale-95 transition-transform">
+        <div onClick={() => onNavigate(View.TARGET_LIST)} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex items-center gap-4 cursor-pointer active:scale-95 transition-transform">
             <div className="w-12 h-12 rounded-full bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center text-purple-500 dark:text-purple-400">
                 <ClipboardCheck size={24} />
             </div>

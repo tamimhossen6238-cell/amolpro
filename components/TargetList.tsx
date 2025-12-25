@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { TargetAmol } from '../types';
-import { ChevronLeft, CheckCircle2, Circle, Plus, FolderCog, Pencil, Trash2, X } from 'lucide-react';
+import { ChevronLeft, CheckCircle2, Circle, Plus, FolderCog, Pencil, Trash2, X, BookOpen, Headphones } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 interface Props {
@@ -15,12 +15,17 @@ interface Props {
 const TargetList: React.FC<Props> = ({ targets, onToggle, onBack, onAdd, onEdit, onDelete }) => {
   const [showModal, setShowModal] = useState(false);
   const [showManager, setShowManager] = useState(false);
+  const [viewingTarget, setViewingTarget] = useState<TargetAmol | null>(null);
+  const [activeTab, setActiveTab] = useState<'arabic' | 'pronunciation' | 'translation'>('arabic');
 
   // Form State
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [neki, setNeki] = useState('');
+  const [arabicText, setArabicText] = useState('');
+  const [banglaPronunciation, setBanglaPronunciation] = useState('');
+  const [banglaTranslation, setBanglaTranslation] = useState('');
 
   const openAddModal = () => {
     resetForm();
@@ -32,6 +37,9 @@ const TargetList: React.FC<Props> = ({ targets, onToggle, onBack, onAdd, onEdit,
     setName(t.name);
     setDescription(t.description);
     setNeki(t.neki.toString());
+    setArabicText(t.arabicText || '');
+    setBanglaPronunciation(t.banglaPronunciation || '');
+    setBanglaTranslation(t.banglaTranslation || '');
     setShowModal(true);
   };
 
@@ -42,9 +50,11 @@ const TargetList: React.FC<Props> = ({ targets, onToggle, onBack, onAdd, onEdit,
         id: editingId || Date.now().toString(),
         name,
         description,
-        // Neki is optional now, default to 0 if empty
         neki: neki ? parseInt(neki) : 0,
-        completed: editingId ? targets.find(t => t.id === editingId)?.completed || false : false
+        completed: editingId ? targets.find(t => t.id === editingId)?.completed || false : false,
+        arabicText: arabicText.trim() || undefined,
+        banglaPronunciation: banglaPronunciation.trim() || undefined,
+        banglaTranslation: banglaTranslation.trim() || undefined
     };
 
     if (editingId) {
@@ -61,6 +71,9 @@ const TargetList: React.FC<Props> = ({ targets, onToggle, onBack, onAdd, onEdit,
     setName('');
     setDescription('');
     setNeki('');
+    setArabicText('');
+    setBanglaPronunciation('');
+    setBanglaTranslation('');
     setEditingId(null);
   };
 
@@ -141,7 +154,63 @@ const TargetList: React.FC<Props> = ({ targets, onToggle, onBack, onAdd, onEdit,
 
   const handleTargetClick = (target: TargetAmol) => {
     if (target.completed) return;
-    confirmToggle(target.id);
+
+    // Show one-time audio suggestion toast
+    const hasShownToast = localStorage.getItem('hasShownAudioSuggestion');
+    const isDefaultTarget = ['t1', 't2', 't3', 't4'].includes(target.id);
+
+    if (!hasShownToast && isDefaultTarget) {
+        toast.custom((t) => (
+            <div
+              className={`max-w-md w-full bg-white dark:bg-slate-800 shadow-lg rounded-2xl pointer-events-auto flex ring-1 ring-black ring-opacity-5 dark:ring-white dark:ring-opacity-10 animate-fade-in`}
+            >
+              <div className="flex-1 w-0 p-4">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0 pt-0.5">
+                    <Headphones size={24} className="text-islamic-600" />
+                  </div>
+                  <div className="ml-3 flex-1">
+                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                      আমলটি শুনেও করতে পারেন
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      পড়তে অসুবিধা হলে, ইউটিউব বা আপনার ডিভাইসে ডাউনলোড করা অডিও শুনেও এই আমলটি সম্পন্ন করতে পারেন।
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex border-l border-slate-200 dark:border-slate-700">
+                <button
+                  onClick={() => toast.dismiss(t.id)}
+                  className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-sm font-medium text-islamic-600 hover:text-islamic-500 focus:outline-none"
+                >
+                  বুঝেছি
+                </button>
+              </div>
+            </div>
+          ), {
+              duration: 7000,
+              position: 'top-center'
+          });
+        localStorage.setItem('hasShownAudioSuggestion', 'true');
+    }
+
+    if (target.arabicText || target.banglaPronunciation || target.banglaTranslation) {
+        // Set default tab based on availability
+        if (target.arabicText) setActiveTab('arabic');
+        else if (target.banglaPronunciation) setActiveTab('pronunciation');
+        else if (target.banglaTranslation) setActiveTab('translation');
+        
+        setViewingTarget(target);
+    } else {
+        confirmToggle(target.id);
+    }
+  };
+
+  const handleCheckboxClick = (e: React.MouseEvent, target: TargetAmol) => {
+      e.stopPropagation();
+      if (target.completed) return;
+      confirmToggle(target.id);
   };
 
   return (
@@ -170,42 +239,155 @@ const TargetList: React.FC<Props> = ({ targets, onToggle, onBack, onAdd, onEdit,
           <div 
             key={target.id} 
             onClick={() => handleTargetClick(target)}
-            className={`p-4 rounded-2xl border transition-all duration-300 cursor-pointer ${
+            className={`p-4 rounded-2xl transition-all duration-300 cursor-pointer ${
                 target.completed 
-                ? 'bg-islamic-50 dark:bg-islamic-900/10 border-islamic-200 dark:border-islamic-900' 
-                : 'bg-white dark:bg-night-800 border-slate-100 dark:border-slate-800 active:scale-[0.98]'
+                ? 'border border-islamic-200 dark:border-islamic-900 bg-islamic-50 dark:bg-islamic-900/10' 
+                : 'bg-white dark:bg-night-800 active:scale-[0.98] border-2 border-red-400 dark:border-red-500'
             }`}
           >
             <div className="flex items-start gap-4">
-                <div className={`mt-1 transition-colors ${target.completed ? 'text-islamic-500' : 'text-slate-300 dark:text-slate-600'}`}>
+                <div 
+                    onClick={(e) => handleCheckboxClick(e, target)}
+                    className={`mt-1 transition-colors p-1 -m-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700/50 ${target.completed ? 'text-islamic-500' : 'text-slate-300 dark:text-slate-600'}`}
+                >
                     {target.completed ? <CheckCircle2 size={24} className="fill-current" /> : <Circle size={24} />}
                 </div>
+
                 <div className="flex-1">
                     <h3 className={`font-bold text-lg ${target.completed ? 'text-islamic-700 dark:text-islamic-300 line-through decoration-2' : 'text-slate-800 dark:text-slate-100'}`}>
                         {target.name}
                     </h3>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{target.description}</p>
-                    <div className="mt-3 flex items-center gap-2">
-                        <span className="text-xs font-bold text-amber-500 bg-amber-50 dark:bg-amber-900/10 px-2 py-1 rounded-md border border-amber-100 dark:border-amber-900/20">
-                            +{target.neki} Neki
-                        </span>
+                    
+                    <div className="mt-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                             {/* Only show Neki if greater than 0, and use Green color */}
+                             {target.neki > 0 && (
+                                <span className="text-xs font-bold text-islamic-600 dark:text-islamic-400 bg-islamic-50 dark:bg-islamic-900/20 px-2 py-1 rounded-md border border-islamic-100 dark:border-islamic-900/20">
+                                    +{target.neki} Neki
+                                </span>
+                             )}
+                        </div>
+                        
+                        {(target.arabicText || target.banglaPronunciation || target.banglaTranslation) && !target.completed && (
+                            <span className="text-xs text-islamic-600 dark:text-islamic-400 bg-islamic-50 dark:bg-islamic-900/20 px-2 py-1 rounded-full flex items-center gap-1 font-bold">
+                                <BookOpen size={12}/> পড়ুন
+                            </span>
+                        )}
                     </div>
                 </div>
             </div>
           </div>
         ))}
 
-        <div className="mt-8 text-center p-6 bg-white dark:bg-night-800 rounded-2xl border border-slate-100 dark:border-slate-800">
-             <h3 className="text-islamic-600 font-bold mb-2">আপনি কি জানেন?</h3>
-             <p className="text-sm text-slate-600 dark:text-slate-300">
-                যে ব্যক্তি সকালে ও সন্ধ্যায় ১০০ বার 'সুবহানাল্লাহি ওয়া বিহামদিহি' পাঠ করে, কিয়ামতের দিন তার চেয়ে উত্তম আমল নিয়ে কেউ আসবে না।
-             </p>
-        </div>
+        {targets.length === 0 && (
+            <div className="text-center py-10 text-slate-400">
+                কোনো টার্গেট নেই। 'যোগ' বাটনে ক্লিক করে শুরু করুন।
+            </div>
+        )}
       </div>
+
+      {/* VIEW TARGET MODAL (With Separated Sections) */}
+      {viewingTarget && (
+        <div 
+            className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+            onClick={(e) => e.target === e.currentTarget && setViewingTarget(null)}
+        >
+            <div className="bg-white dark:bg-night-800 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh] border-2 border-islamic-500 animate-grow">
+                {/* Modal Header */}
+                <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-islamic-50 dark:bg-islamic-900/20 rounded-t-xl">
+                    <h3 className="font-bold text-lg text-slate-800 dark:text-white truncate pr-4">{viewingTarget.name}</h3>
+                    <button onClick={() => setViewingTarget(null)} className="p-1 rounded-full hover:bg-black/10 text-slate-500"><X size={24}/></button>
+                </div>
+                
+                {/* Tabs for Separation */}
+                <div className="flex p-2 gap-2 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-night-900">
+                     {viewingTarget.arabicText && (
+                         <button 
+                            onClick={() => setActiveTab('arabic')}
+                            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${activeTab === 'arabic' ? 'bg-white dark:bg-slate-700 shadow text-islamic-600 dark:text-white' : 'text-slate-500'}`}
+                         >
+                             আরবি
+                         </button>
+                     )}
+                     {viewingTarget.banglaPronunciation && (
+                         <button 
+                            onClick={() => setActiveTab('pronunciation')}
+                            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${activeTab === 'pronunciation' ? 'bg-white dark:bg-slate-700 shadow text-islamic-600 dark:text-white' : 'text-slate-500'}`}
+                         >
+                             উচ্চারণ
+                         </button>
+                     )}
+                     {viewingTarget.banglaTranslation && (
+                         <button 
+                            onClick={() => setActiveTab('translation')}
+                            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${activeTab === 'translation' ? 'bg-white dark:bg-slate-700 shadow text-islamic-600 dark:text-white' : 'text-slate-500'}`}
+                         >
+                             অর্থ
+                         </button>
+                     )}
+                </div>
+
+                {/* Modal Body */}
+                <div className="overflow-y-auto p-6 flex-1">
+                    {activeTab === 'arabic' && viewingTarget.arabicText && (
+                        <div className="text-center animate-fade-in">
+                            <p 
+                                className="font-serif text-2xl md:text-3xl leading-loose text-slate-800 dark:text-slate-100" 
+                                style={{ direction: /[\u0600-\u06FF]/.test(viewingTarget.arabicText) ? 'rtl' : 'ltr' }}
+                            >
+                                {viewingTarget.arabicText}
+                            </p>
+                        </div>
+                    )}
+                    
+                    {activeTab === 'pronunciation' && viewingTarget.banglaPronunciation && (
+                         <div className="animate-fade-in">
+                             <h4 className="text-xs font-bold uppercase text-slate-400 mb-2">বাংলা উচ্চারণ</h4>
+                             <p className="text-slate-700 dark:text-slate-200 whitespace-pre-wrap leading-relaxed text-base text-center">
+                                {viewingTarget.banglaPronunciation}
+                             </p>
+                         </div>
+                    )}
+
+                    {activeTab === 'translation' && viewingTarget.banglaTranslation && (
+                         <div className="animate-fade-in">
+                             <h4 className="text-xs font-bold uppercase text-slate-400 mb-2">বাংলা অর্থ</h4>
+                             <p className="text-slate-700 dark:text-slate-200 whitespace-pre-wrap leading-relaxed text-base text-center">
+                                {viewingTarget.banglaTranslation}
+                             </p>
+                         </div>
+                    )}
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-night-900/50 rounded-b-xl flex gap-3">
+                     <button 
+                        onClick={() => setViewingTarget(null)}
+                        className="flex-1 py-3 rounded-xl font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                    >
+                        বন্ধ করুন
+                     </button>
+                     <button 
+                        onClick={() => {
+                            setViewingTarget(null);
+                            confirmToggle(viewingTarget.id);
+                        }}
+                        className="flex-1 py-3 rounded-xl font-bold text-white bg-islamic-600 shadow-lg shadow-islamic-600/30 hover:bg-islamic-700"
+                    >
+                        সম্পন্ন হয়েছে
+                     </button>
+                </div>
+            </div>
+        </div>
+      )}
 
       {/* File Manager Modal */}
       {showManager && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div 
+          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+          onClick={(e) => e.target === e.currentTarget && setShowManager(false)}
+        >
             <div className="bg-white dark:bg-night-800 rounded-2xl w-full max-w-sm shadow-xl flex flex-col max-h-[80vh] border dark:border-slate-700">
                 <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
                     <h3 className="font-bold text-lg dark:text-white flex items-center gap-2"><FolderCog size={20}/> ফাইল ম্যানেজার</h3>
@@ -239,7 +421,10 @@ const TargetList: React.FC<Props> = ({ targets, onToggle, onBack, onAdd, onEdit,
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
+        <div 
+          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto"
+          onClick={(e) => e.target === e.currentTarget && setShowModal(false)}
+        >
           <div className="bg-white dark:bg-night-800 rounded-2xl p-6 w-full max-w-sm shadow-xl max-h-[90vh] overflow-y-auto no-scrollbar border dark:border-slate-700">
             <h3 className="text-lg font-bold mb-4 dark:text-white">{editingId ? 'টার্গেট এডিট করুন' : 'নতুন টার্গেট যোগ করুন'}</h3>
             
@@ -261,9 +446,42 @@ const TargetList: React.FC<Props> = ({ targets, onToggle, onBack, onAdd, onEdit,
                     <label className="block text-xs font-bold text-slate-500 mb-1">বর্ণনা/ফজিলত (অপশনাল)</label>
                     <textarea 
                     placeholder="বর্ণনা দিন..." 
-                    className="w-full p-3 rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-black dark:text-white h-20 resize-none"
+                    className="w-full p-3 rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-black dark:text-white h-16 resize-none"
                     value={description}
                     onChange={e => setDescription(e.target.value)}
+                    />
+                </div>
+
+                {/* Arabic Text */}
+                <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">আরবি টেক্সট (অপশনাল)</label>
+                    <textarea 
+                    placeholder="আরবি টেক্সট লিখুন..." 
+                    className="w-full p-3 rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-black dark:text-white h-20 resize-none font-serif"
+                    value={arabicText}
+                    onChange={e => setArabicText(e.target.value)}
+                    />
+                </div>
+
+                {/* Pronunciation */}
+                <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">বাংলা উচ্চারণ (অপশনাল)</label>
+                    <textarea 
+                    placeholder="বাংলা উচ্চারণ..." 
+                    className="w-full p-3 rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-black dark:text-white h-20 resize-none"
+                    value={banglaPronunciation}
+                    onChange={e => setBanglaPronunciation(e.target.value)}
+                    />
+                </div>
+
+                {/* Translation */}
+                <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">বাংলা অর্থ (অপশনাল)</label>
+                    <textarea 
+                    placeholder="বাংলা অর্থ..." 
+                    className="w-full p-3 rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-black dark:text-white h-20 resize-none"
+                    value={banglaTranslation}
+                    onChange={e => setBanglaTranslation(e.target.value)}
                     />
                 </div>
 

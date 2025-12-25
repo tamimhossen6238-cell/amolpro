@@ -18,6 +18,13 @@ interface Particle {
   y: number;
 }
 
+interface Meteor {
+    id: number;
+    left: string;
+    top: string;
+    duration: string;
+}
+
 // Fixed Fruit Positions for consistent rendering
 const FRUIT_POSITIONS = [
     { cx: 150, cy: 50, r: 6 }, { cx: 120, cy: 60, r: 7 }, { cx: 180, cy: 55, r: 6 },
@@ -41,6 +48,7 @@ const FocusMode: React.FC<Props> = ({ tasbih, onUpdate, onTimeUpdate, onBack, da
   const [particles, setParticles] = useState<Particle[]>([]);
   const [isPulsing, setIsPulsing] = useState(false);
   const [isIdle, setIsIdle] = useState(false);
+  const [meteors, setMeteors] = useState<Meteor[]>([]);
   
   // Timer States
   const [duration, setDuration] = useState(tasbih.todayTime || 0); 
@@ -55,6 +63,13 @@ const FocusMode: React.FC<Props> = ({ tasbih, onUpdate, onTimeUpdate, onBack, da
   const onUpdateRef = useRef(onUpdate);
 
   const isGeneralTasbih = tasbih.id === 'general_tasbih';
+
+  // Determine growth basis (Used for Tree and Environment)
+  const growthBasisCount = isGeneralTasbih ? sessionCount : totalDisplayCount;
+  
+  // Ref to track growthBasisCount inside intervals without resetting them
+  const growthBasisCountRef = useRef(growthBasisCount);
+  useEffect(() => { growthBasisCountRef.current = growthBasisCount; }, [growthBasisCount]);
 
   // Keep refs in sync
   useEffect(() => { onTimeUpdateRef.current = onTimeUpdate; }, [onTimeUpdate]);
@@ -87,22 +102,43 @@ const FocusMode: React.FC<Props> = ({ tasbih, onUpdate, onTimeUpdate, onBack, da
       onBack();
   };
 
+  // Meteor Logic for Dark Mode
+  useEffect(() => {
+    if (!darkMode) {
+        setMeteors([]);
+        return;
+    }
+    const interval = setInterval(() => {
+        // Only start meteors if count is 100 or more
+        if (growthBasisCountRef.current < 100) return;
+
+        // 40% chance every 3 seconds to spawn a meteor
+        if (Math.random() < 0.4) {
+            const id = Date.now();
+            setMeteors(prev => [...prev, {
+                id,
+                left: `${Math.floor(Math.random() * 60) + 20}%`, // Keep centrally
+                top: `${Math.floor(Math.random() * 30)}%`, // Spawn in top 30%
+                duration: `${Math.random() * 2 + 2}s` // 2-4s duration (gentle speed)
+            }]);
+            
+            // Cleanup
+            setTimeout(() => {
+                setMeteors(prev => prev.filter(m => m.id !== id));
+            }, 4500);
+        }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [darkMode]);
+
   // --- ENHANCED GROWTH LOGIC ---
   
-  // Determine which count controls the tree growth
-  // For General Tasbih: Use sessionCount (Resets every entry)
-  // For Specific Tasbih: Use totalDisplayCount (Accumulated history)
-  const growthBasisCount = isGeneralTasbih ? sessionCount : totalDisplayCount;
-
   // 1. Scale (Size): Grows from 0 to 100 count. 
   let currentScale = 0;
   if (growthBasisCount > 0) {
       const progressTo100 = Math.min(growthBasisCount, 100) / 100;
-      currentScale = 0.2 + (Math.pow(progressTo100, 2.5) * 0.8);
+      currentScale = 0.2 + (Math.pow(progressTo100, 2.5) * 0.75); // Max scale is 0.95
   }
-
-  // Check if tree is large enough to move text up
-  const isTreeLarge = currentScale > 0.5;
 
   // 2. Density (Branches/Leaves): Increases from 100 to 500 count.
   let densityProgress = 0;
@@ -113,14 +149,32 @@ const FocusMode: React.FC<Props> = ({ tasbih, onUpdate, onTimeUpdate, onBack, da
   
   // Memoize stars
   const stars = useMemo(() => {
-    return [...Array(40)].map((_, i) => ({
-      id: i,
-      size: Math.random() * 2 + 1 + 'px',
-      top: Math.random() * 100 + '%',
-      left: Math.random() * 100 + '%',
-      animationDuration: Math.random() * 3 + 2 + 's',
-      animationDelay: Math.random() * 2 + 's',
-    }));
+    // Generate star candidates
+    const starCandidates = [...Array(45)].map((_, i) => {
+        const top = Math.random() * 100;
+        const left = Math.random() * 100;
+        return {
+            id: i,
+            size: Math.random() * 2 + 1 + 'px',
+            top: top, // Keep as number for filtering
+            left: left, // Keep as number for filtering
+            animationDuration: Math.random() * 3 + 2 + 's',
+            animationDelay: Math.random() * 2 + 's',
+        };
+    });
+
+    // Filter out stars in the top-left corner (moon's zone) and format for styling
+    return starCandidates
+        .filter(star => {
+            // Moon's approximate zone: top < 30%, left < 20%
+            const isBehindMoon = star.left < 20 && star.top < 30;
+            return !isBehindMoon;
+        })
+        .map(star => ({
+            ...star,
+            top: `${star.top}%`,
+            left: `${star.left}%`,
+        }));
   }, []);
 
   // Timer Ticking Logic
@@ -359,6 +413,12 @@ const FocusMode: React.FC<Props> = ({ tasbih, onUpdate, onTimeUpdate, onBack, da
             60% { transform: scale(1.2); }
             100% { transform: scale(1); }
         }
+        @keyframes meteor {
+            0% { transform: rotate(-45deg) translateX(0); opacity: 0; }
+            10% { opacity: 1; }
+            80% { opacity: 1; }
+            100% { transform: rotate(-45deg) translateX(-300px); opacity: 0; }
+        }
       `}</style>
 
       {/* Atmospheric Particles - Z-Index 0 */}
@@ -379,8 +439,19 @@ const FocusMode: React.FC<Props> = ({ tasbih, onUpdate, onTimeUpdate, onBack, da
                     />
                 ))}
                 
+                {/* Meteors */}
+                {meteors.map(m => (
+                    <div key={m.id} className="absolute h-0.5 w-24 bg-gradient-to-l from-white to-transparent opacity-0"
+                         style={{
+                             top: m.top,
+                             left: m.left,
+                             animation: `meteor ${m.duration} linear forwards`
+                         }}
+                    />
+                ))}
+                
                 {/* Crescent Moon */}
-                <div className="absolute top-16 right-8 w-16 h-16 rounded-full shadow-[-8px_4px_0_2px_#fff] rotate-[-25deg] opacity-90 drop-shadow-[0_0_15px_rgba(255,255,255,0.4)]"></div>
+                <div className="absolute top-28 left-4 w-12 h-12 rounded-full shadow-[5px_2px_0_2px_#fff] rotate-[25deg] opacity-90 drop-shadow-[0_0_15px_rgba(255,255,255,0.4)]"></div>
             </>
         ) : (
             <div className="absolute top-[-50px] right-[-50px] w-64 h-64 bg-yellow-300 rounded-full blur-[80px] opacity-40"></div>
@@ -388,32 +459,42 @@ const FocusMode: React.FC<Props> = ({ tasbih, onUpdate, onTimeUpdate, onBack, da
       </div>
 
       {/* Header - Z-Index 50 (Always on top) */}
-      <div className="absolute top-0 left-0 w-full z-50 p-4 flex justify-between items-center text-slate-800 dark:text-white">
+      <div className="absolute top-0 left-0 w-full z-50 p-4 text-slate-800 dark:text-white">
         <button onClick={handleBack} className="p-2 bg-white/20 dark:bg-white/10 backdrop-blur-md rounded-full active:scale-95 transition-transform"><ChevronLeft /></button>
       </div>
 
-      {/* TOP INFO CARD - Z-Index 40 (Moved to Top) */}
-      <div 
-        className="absolute left-0 w-full z-40 flex flex-col items-center justify-start px-6 text-center transition-all duration-700 ease-in-out"
-        style={{
-            top: isTreeLarge ? '16px' : '48px',
-            transform: isTreeLarge ? 'scale(0.85)' : 'scale(1)',
-            opacity: 1
-        }}
-      >
-           {tasbih.arabicText && (
-                <div className="text-2xl md:text-3xl font-serif text-islamic-800 dark:text-islamic-100 drop-shadow-sm leading-normal animate-fade-in py-1">
-                    {tasbih.arabicText}
-                </div>
-            )}
-            <div className="bg-white/30 dark:bg-night-800/60 backdrop-blur-md rounded-xl py-1 px-3 inline-block border border-white/40 dark:border-white/10 shadow-sm">
-                <h2 className="text-base text-slate-800 dark:text-slate-100 font-bold">{tasbih.name}</h2>
-                {tasbih.banglaMeaning && <p className="text-[10px] text-slate-700 dark:text-slate-300">{tasbih.banglaMeaning}</p>}
+      {/* TOP INFO CARD - Z-Index 40 */}
+      {!isGeneralTasbih && (tasbih.arabicText || tasbih.banglaPronunciation || tasbih.banglaTranslation) && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 p-2 rounded-xl shadow-lg glass w-full max-w-[250px] animate-fade-in">
+            <div className="text-center">
+                <h3 className="font-bold text-sm text-slate-800 dark:text-white truncate" title={tasbih.name}>
+                    {tasbih.name}
+                </h3>
+                {tasbih.arabicText && (
+                    <p className="font-serif text-base text-slate-800 dark:text-slate-100 leading-tight mt-1">
+                        {tasbih.arabicText}
+                    </p>
+                )}
+                {(tasbih.banglaPronunciation || tasbih.banglaTranslation) && (
+                    <div className="pt-1.5 mt-1.5 border-t border-white/50 dark:border-white/10 space-y-1 text-center">
+                        {tasbih.banglaPronunciation && (
+                            <p className="text-[10px] text-slate-700 dark:text-slate-300 leading-snug">
+                                <b>উচ্চারণ:</b> {tasbih.banglaPronunciation}
+                            </p>
+                        )}
+                        {tasbih.banglaTranslation && (
+                            <p className="text-[10px] text-slate-700 dark:text-slate-300 leading-snug">
+                               <b>অর্থ:</b> {tasbih.banglaTranslation}
+                            </p>
+                        )}
+                    </div>
+                )}
             </div>
-      </div>
+        </div>
+      )}
 
       {/* --- TREE VISUALIZATION CONTAINER - Z-Index 20 --- */}
-      <div className="absolute inset-0 z-20 flex items-end justify-center pb-52 pointer-events-none">
+      <div className="absolute inset-0 z-20 flex items-end justify-center pb-48 pointer-events-none">
              
              {/* Particles (Z-Index 10: Behind Tree) */}
              {particles.map(p => (
@@ -547,7 +628,7 @@ const FocusMode: React.FC<Props> = ({ tasbih, onUpdate, onTimeUpdate, onBack, da
                         {isTimerRunning && (
                             <button 
                                 onClick={handleManualPause}
-                                className="absolute -top-2 -right-2 p-1 bg-red-100 dark:bg-red-900 text-red-600 rounded-full shadow-sm hover:scale-110 transition-transform"
+                                className="absolute -top-2 -left-2 p-1 bg-islamic-100 dark:bg-islamic-900 text-islamic-600 rounded-full shadow-sm hover:scale-110 transition-transform"
                             >
                                 <Pause size={10} fill="currentColor" />
                             </button>

@@ -1,9 +1,11 @@
 
+
 export interface Tasbih {
     id: string;
     name: string;
     arabicText?: string;
-    banglaMeaning?: string;
+    banglaPronunciation?: string; // Bangla Uccharon
+    banglaTranslation?: string; // Bangla Ortho
     schedule: 'everyday' | string[]; // 'everyday' or array of days ['Sat', 'Sun']
     count: number; // Today's count
     totalCount: number;
@@ -17,6 +19,9 @@ export interface TargetAmol {
     description: string;
     neki: number;
     completed: boolean;
+    arabicText?: string; 
+    banglaPronunciation?: string; // New field for Uccharon
+    banglaTranslation?: string; // New field for Ortho
 }
 
 export interface JournalEntry {
@@ -30,6 +35,7 @@ export interface DailyHistory {
     date: string;       // YYYY-MM-DD
     totalTime: number;  // Seconds
     totalNeki: number;
+    tasbihCounts?: Record<string, number>; // Key: TasbihID, Value: Count
 }
 
 export interface GardenTree {
@@ -38,6 +44,7 @@ export interface GardenTree {
     date: string;
     count: number; // Snapshot of totalCount to render the tree exactly as it was
     isLive?: boolean; // To distinguish today's active trees
+    type?: 'tasbih' | 'journal'; // New field to identify tree type
 }
 
 export interface Stats {
@@ -50,6 +57,9 @@ export interface Stats {
     todayJournalCount: number;
     lastHadithDate: string; // To ensure one hadith per day
     shownHadithIndices: number[]; // To track history and prevent repeats
+    lastWeeklyReportDate?: string; // Track last weekly report generation
+    lastMonthlyReportDate?: string; // Track last monthly report generation
+    todayActivityPerformed?: boolean;
 }
 
 export interface InboxMessage {

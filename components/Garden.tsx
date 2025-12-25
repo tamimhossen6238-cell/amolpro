@@ -1,13 +1,68 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { GardenTree, Tasbih } from '../types';
-import { Sprout, TreeDeciduous, CalendarDays } from 'lucide-react';
+import { Sprout, TreeDeciduous, CalendarDays, Filter } from 'lucide-react';
 
 interface Props {
   trees: GardenTree[];
   tasbihs: Tasbih[]; 
 }
 
-const MiniTree = ({ count, darkMode }: { count: number, darkMode: boolean }) => {
+const MiniTree = ({ count, darkMode, type = 'tasbih' }: { count: number, darkMode: boolean, type?: 'tasbih' | 'journal' }) => {
+    
+    // --- SPECIAL JOURNAL FLOWER (INSTEAD OF TREE) ---
+    if (type === 'journal') {
+        const stemColor = darkMode ? "#065f46" : "#059669"; // Emerald-800 : Emerald-600
+        const leafColor = darkMode ? "#10b981" : "#34d399"; // Emerald-500 : Emerald-400
+        
+        // Flower Petal Colors (Updated to Yellow)
+        const petalMain = darkMode ? "#f59e0b" : "#facc15"; // Amber-500 : Yellow-400
+        const petalLight = darkMode ? "#fcd34d" : "#fef08a"; // Amber-300 : Yellow-200
+        const centerColor = darkMode ? "#78350f" : "#92400e"; // Amber-900 : Amber-800
+
+        return (
+            <svg viewBox="0 0 200 200" className="w-full h-full overflow-visible" style={{ transformOrigin: 'bottom center' }}>
+                 <g transform-origin="100 180">
+                    {/* Stem - Slight Sway */}
+                    <path d="M100,180 Q100,140 100,100" stroke={stemColor} strokeWidth="4" fill="none" strokeLinecap="round" />
+                    
+                    {/* Leaves */}
+                    <path d="M100,140 Q80,130 70,145 Q90,150 100,140" fill={leafColor} opacity="0.9" />
+                    <path d="M100,120 Q120,110 130,125 Q110,130 100,120" fill={leafColor} opacity="0.9" />
+
+                    {/* Flower Head */}
+                    <g transform="translate(100, 100)">
+                        {/* Back Petals */}
+                        <circle cx="0" cy="-15" r="15" fill={petalMain} transform="rotate(0)" opacity="0.9" />
+                        <circle cx="0" cy="-15" r="15" fill={petalMain} transform="rotate(72)" opacity="0.9" />
+                        <circle cx="0" cy="-15" r="15" fill={petalMain} transform="rotate(144)" opacity="0.9" />
+                        <circle cx="0" cy="-15" r="15" fill={petalMain} transform="rotate(216)" opacity="0.9" />
+                        <circle cx="0" cy="-15" r="15" fill={petalMain} transform="rotate(288)" opacity="0.9" />
+                        
+                        {/* Inner Petals (Lighter) */}
+                        <circle cx="0" cy="-8" r="12" fill={petalLight} transform="rotate(36)" opacity="0.95" />
+                        <circle cx="0" cy="-8" r="12" fill={petalLight} transform="rotate(108)" opacity="0.95" />
+                        <circle cx="0" cy="-8" r="12" fill={petalLight} transform="rotate(180)" opacity="0.95" />
+                        <circle cx="0" cy="-8" r="12" fill={petalLight} transform="rotate(252)" opacity="0.95" />
+                        <circle cx="0" cy="-8" r="12" fill={petalLight} transform="rotate(324)" opacity="0.95" />
+
+                        {/* Center */}
+                        <circle cx="0" cy="0" r="8" fill={centerColor} />
+                        <circle cx="-2" cy="-2" r="2" fill="white" opacity="0.5" />
+                    </g>
+                    
+                    {/* Sparkles around flower */}
+                    <circle cx="70" cy="80" r="2" fill="#fbbf24" opacity="0.6">
+                        <animate attributeName="opacity" values="0;1;0" dur="2s" repeatCount="indefinite" />
+                    </circle>
+                    <circle cx="130" cy="90" r="1.5" fill="#fbbf24" opacity="0.6">
+                        <animate attributeName="opacity" values="0;1;0" dur="3s" repeatCount="indefinite" />
+                    </circle>
+                 </g>
+            </svg>
+        );
+    }
+
+    // --- STANDARD TASBIH TREE ---
     // Fixed positions for consistent rendering
     const FRUIT_POSITIONS = [
         { cx: 150, cy: 50, r: 6 }, { cx: 120, cy: 60, r: 7 }, { cx: 180, cy: 55, r: 6 },
@@ -173,7 +228,29 @@ interface GroupedTrees {
 }
 
 const Garden: React.FC<Props> = ({ trees, tasbihs }) => {
-  // 1. Create temporary tree objects for today's active tasbihs (>= 100 count)
+  const [gridCols, setGridCols] = useState<number>(() => {
+    const savedCols = localStorage.getItem('gardenGridCols');
+    return savedCols ? parseInt(savedCols, 10) : 3;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('gardenGridCols', gridCols.toString());
+  }, [gridCols]);
+
+  const toggleGridLayout = () => {
+    setGridCols(prev => {
+      if (prev === 2) return 3;
+      if (prev === 3) return 4;
+      return 2; // Cycle from 4 back to 2
+    });
+  };
+
+  const gridClassMap: { [key: number]: string } = {
+      2: 'grid-cols-2 gap-3',
+      3: 'grid-cols-3 gap-3',
+      4: 'grid-cols-4 gap-2',
+  };
+
   const liveTrees: GardenTree[] = tasbihs
       .filter(t => t.count >= 100)
       .map(t => ({
@@ -181,14 +258,12 @@ const Garden: React.FC<Props> = ({ trees, tasbihs }) => {
           tasbihName: t.name,
           date: new Date().toISOString(),
           count: t.count,
-          isLive: true
+          isLive: true,
+          type: 'tasbih'
       }));
 
-  // 2. Combine with historical trees. 
-  // We put live trees first so they appear at the top.
   const allTrees = [...liveTrees, ...[...trees].reverse()];
 
-  // 3. Group trees by date
   const groups: GroupedTrees[] = [];
   
   allTrees.forEach(tree => {
@@ -214,8 +289,17 @@ const Garden: React.FC<Props> = ({ trees, tasbihs }) => {
         <h2 className="font-bold text-lg dark:text-white flex items-center gap-2">
             <Sprout size={20} className="text-islamic-600"/> আমলের বাগান
         </h2>
-        <div className="bg-islamic-50 dark:bg-islamic-900/30 px-3 py-1 rounded-full border border-islamic-100 dark:border-islamic-800">
-            <span className="text-xs font-bold text-islamic-700 dark:text-islamic-400">মোট গাছ: {allTrees.length}</span>
+        <div className="flex items-center gap-2">
+            <div className="bg-islamic-50 dark:bg-islamic-900/30 px-3 py-1.5 rounded-full border border-islamic-100 dark:border-islamic-800">
+                <span className="text-xs font-bold text-islamic-700 dark:text-islamic-400">মোট গাছ: {allTrees.length}</span>
+            </div>
+            <button
+                onClick={toggleGridLayout}
+                className="bg-slate-100 dark:bg-slate-700 w-8 h-8 rounded-full flex items-center justify-center text-slate-500 dark:text-slate-300 shadow-sm active:scale-95 transition-transform"
+                aria-label={`Change grid layout to ${gridCols === 4 ? 2 : gridCols + 1} columns`}
+            >
+                <Filter size={16} />
+            </button>
         </div>
       </div>
 
@@ -227,7 +311,7 @@ const Garden: React.FC<Props> = ({ trees, tasbihs }) => {
                 </div>
                 <h3 className="text-xl font-bold text-slate-700 dark:text-slate-200 mb-2">বাগান এখনো খালি</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed max-w-xs mx-auto">
-                    যেকোনো তাসবীহ কমপক্ষে ১০০ বার পাঠ করলে তা এখানে গাছ হিসেবে যুক্ত হবে। আজ বেশি বেশি আমল করুন একটি সুন্দর বাগানের জন্য! 🌳
+                    যেকোনো তাসবীহ কমপক্ষে ১০০ বার পাঠ করলে অথবা একটি জার্নাল লিখলে তা এখানে গাছ হিসেবে যুক্ত হবে। আজ বেশি বেশি আমল করুন একটি সুন্দর বাগানের জন্য! 🌳
                 </p>
             </div>
         ) : (
@@ -240,22 +324,22 @@ const Garden: React.FC<Props> = ({ trees, tasbihs }) => {
                         <span className="text-xs text-slate-400 font-mono">({group.trees.length})</span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className={`grid ${gridClassMap[gridCols]}`}>
                         {group.trees.map((tree) => (
-                            <div key={tree.id} className={`rounded-2xl p-4 shadow-sm border flex flex-col items-center relative overflow-hidden group transition-all ${tree.isLive ? 'bg-indigo-50/50 dark:bg-indigo-900/10 border-indigo-100 dark:border-indigo-800 ring-1 ring-indigo-200 dark:ring-indigo-700' : 'bg-white dark:bg-night-800 border-slate-100 dark:border-slate-800'}`}>
+                            <div key={tree.id} className={`rounded-xl p-2 shadow-sm border flex flex-col items-center relative overflow-hidden group transition-all ${tree.type === 'journal' ? 'bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-800 ring-1 ring-emerald-200 dark:ring-emerald-700' : (tree.isLive ? 'bg-islamic-50/50 dark:bg-islamic-900/10 border-islamic-100 dark:border-islamic-800 ring-1 ring-islamic-200 dark:ring-islamic-700' : 'bg-white dark:bg-night-800 border-islamic-200 dark:border-islamic-900')}`}>
                                 {/* Background Decoration */}
-                                <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-emerald-50 to-transparent dark:from-emerald-900/10 pointer-events-none"></div>
+                                <div className={`absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t to-transparent pointer-events-none ${tree.type === 'journal' ? 'from-emerald-50 dark:from-emerald-900/10' : 'from-emerald-50 dark:from-emerald-900/10'}`}></div>
                                 
                                 {/* Tree Rendering */}
-                                <div className="w-full h-32 flex items-end justify-center mb-2 z-10">
-                                    <MiniTree count={tree.count} darkMode={document.documentElement.classList.contains('dark')} />
+                                <div className="w-full h-24 flex items-end justify-center mb-1 z-10">
+                                    <MiniTree count={tree.count} darkMode={document.documentElement.classList.contains('dark')} type={tree.type} />
                                 </div>
 
                                 {/* Info */}
-                                <div className="text-center z-10 w-full">
-                                    <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">{tree.tasbihName}</h4>
-                                    <div className={`mt-2 inline-block px-2 py-0.5 rounded text-[10px] font-bold ${tree.isLive ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
-                                        {tree.count} বার
+                                <div className="text-center z-10 w-full px-1">
+                                    <h4 className={`font-bold text-xs truncate ${tree.type === 'journal' ? 'text-emerald-800 dark:text-emerald-200' : 'text-slate-800 dark:text-slate-100'}`}>{tree.tasbihName}</h4>
+                                    <div className={`mt-1 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold ${tree.type === 'journal' ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300' : (tree.isLive ? 'bg-islamic-100 dark:bg-islamic-900 text-islamic-700 dark:text-islamic-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300')}`}>
+                                        {tree.type === 'journal' ? 'জার্নাল' : `${tree.count}`}
                                     </div>
                                 </div>
                             </div>
